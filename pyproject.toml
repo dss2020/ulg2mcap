@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ulg2mcap"
+version = "0.1.0"
+description = "ULog to MCAP file converter"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pyulog>=1.1.0",
+    "mcap>=1.1.0",
+    "zstandard>=0.21.0",
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+ulg2mcap = "ulg2mcap.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ulg2mcap"]
