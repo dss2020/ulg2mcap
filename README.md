@@ -70,5 +70,5 @@ converter.convert("input_log.ulg", "output_log.mcap")
 ## Running Tests
 
 ```bash
-uv run --project tools/ulg2mcap pytest tools/ulg2mcap/tests/
+uv run --project tools/ulg2mcap --extra test pytest tools/ulg2mcap/tests/
 ```
