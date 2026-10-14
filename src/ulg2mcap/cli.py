@@ -61,6 +61,12 @@ def main() -> int:
         help="Comma or space-separated topic names to exclude.",
     )
     parser.add_argument(
+        "--time-offset-ns",
+        type=int,
+        default=0,
+        help="Offset (ns) added to every MCAP log/publish time, e.g. to map boot time to UTC.",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -81,6 +87,7 @@ def main() -> int:
         include_topics=include_topics,
         exclude_topics=exclude_topics,
         compression=args.compress,
+        time_offset_ns=args.time_offset_ns,
     )
 
     if input_path.is_file():
