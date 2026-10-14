@@ -74,3 +74,7 @@ uv run --extra test pytest tests/
 ```
 
 The sample-log tests skip unless `ULG2MCAP_SAMPLE_ULG` points at a `.ulg` file.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

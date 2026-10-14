@@ -7,6 +7,7 @@ name = "ulg2mcap"
 version = "0.1.0"
 description = "ULog to MCAP file converter"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
     "pyulog>=1.1.0",
