@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 from pathlib import Path
 import numpy as np
@@ -8,9 +9,9 @@ from mcap.reader import make_reader
 from ulg2mcap.converter import ULog2MCAPConverter
 from ulg2mcap.schemas import generate_json_schema, parse_grouped_fields
 
-SAMPLE_ULG_PATH = (
-    Path(__file__).resolve().parents[2] / "ekf_playback" / "ulog_files" / "log_sample.ulg"
-)
+# Set ULG2MCAP_SAMPLE_ULG to a .ulg file to run the sample-log tests.
+SAMPLE_ULG_PATH = Path(os.environ.get("ULG2MCAP_SAMPLE_ULG", ""))
+HAVE_SAMPLE_ULG = SAMPLE_ULG_PATH.is_file()
 
 
 def test_schema_generation():
@@ -30,7 +31,7 @@ def test_schema_generation():
     assert schema["properties"]["flag"]["type"] == "boolean"
 
 
-@pytest.mark.skipif(not SAMPLE_ULG_PATH.exists(), reason="Sample ULog file not found")
+@pytest.mark.skipif(not HAVE_SAMPLE_ULG, reason="ULG2MCAP_SAMPLE_ULG not set to a .ulg file")
 def test_full_conversion_and_reading():
     with tempfile.TemporaryDirectory() as tmp_dir:
         out_mcap = Path(tmp_dir) / "output.mcap"
@@ -72,7 +73,7 @@ def test_full_conversion_and_reading():
                     break
 
 
-@pytest.mark.skipif(not SAMPLE_ULG_PATH.exists(), reason="Sample ULog file not found")
+@pytest.mark.skipif(not HAVE_SAMPLE_ULG, reason="ULG2MCAP_SAMPLE_ULG not set to a .ulg file")
 def test_include_exclude_topics():
     with tempfile.TemporaryDirectory() as tmp_dir:
         out_mcap = Path(tmp_dir) / "filtered.mcap"

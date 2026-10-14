@@ -20,7 +20,7 @@
 Using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-uv pip install -e tools/ulg2mcap
+uv pip install -e .
 ```
 
 ---
@@ -36,7 +36,7 @@ uv run ulg2mcap flight_log.ulg -o flight_log.mcap
 
 #### Batch Conversion (Directory)
 ```bash
-uv run ulg2mcap tools/ekf_playback/ulog_files/ -o scratch/mcap_output/ --recursive
+uv run ulg2mcap logs/ -o mcap_output/ --recursive
 ```
 
 #### CLI Options
@@ -70,5 +70,7 @@ converter.convert("input_log.ulg", "output_log.mcap")
 ## Running Tests
 
 ```bash
-uv run --project tools/ulg2mcap --extra test pytest tools/ulg2mcap/tests/
+uv run --extra test pytest tests/
 ```
+
+The sample-log tests skip unless `ULG2MCAP_SAMPLE_ULG` points at a `.ulg` file.
