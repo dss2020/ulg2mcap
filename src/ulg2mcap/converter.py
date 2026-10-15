@@ -34,6 +34,9 @@ class ULog2MCAPConverter:
         exclude_topics: Optional[List[str]] = None,
         compression: str = "zstd",
         time_offset_ns: int = 0,
+        start_us: Optional[int] = None,
+        end_us: Optional[int] = None,
+        carry_state: bool = False,
     ):
         """Initialize converter options.
 
@@ -44,6 +47,14 @@ class ULog2MCAPConverter:
             time_offset_ns: Offset added to every MCAP log_time/publish_time, e.g. to shift
                 ULog boot-relative time onto the UTC epoch. The `timestamp` fields inside
                 message payloads are left untouched (boot-relative).
+            start_us: Only write messages logged at or after this ULog timestamp (us,
+                before time_offset_ns). None: from the start of the log.
+            end_us: Only write messages logged at or before this ULog timestamp (us).
+                None: to the end of the log.
+            carry_state: With start_us, also write each topic's latest message from before
+                start_us, stamped at start_us, so topics logged only on change still have
+                their current value at the start of the range. The payload (including its
+                own `timestamp` field) is unchanged. Text log messages are never carried.
         """
         self.include_topics: Optional[Set[str]] = (
             set(include_topics) if include_topics else None
@@ -57,6 +68,28 @@ class ULog2MCAPConverter:
             )
         self.compression_type = self.COMPRESSION_MAP[compression_lower]
         self.time_offset_ns = int(time_offset_ns)
+        if start_us is not None and end_us is not None and start_us > end_us:
+            raise ValueError(f"start_us ({start_us}) is after end_us ({end_us})")
+        self.start_us = None if start_us is None else int(start_us)
+        self.end_us = None if end_us is None else int(end_us)
+        self.carry_state = bool(carry_state)
+
+    def _in_range(self, timestamp_us: int) -> bool:
+        return (self.start_us is None or timestamp_us >= self.start_us) and (
+            self.end_us is None or timestamp_us <= self.end_us
+        )
+
+    def _selected(self, timestamps: np.ndarray) -> List[Tuple[int, int]]:
+        """(index, write timestamp in us) of one topic's messages to write, in time order
+        (stable for ties): those in range, preceded by the carried state if enabled."""
+        order = np.argsort(timestamps, kind="stable")
+        ordered = timestamps[order].astype(np.int64)
+        lo = 0 if self.start_us is None else int(np.searchsorted(ordered, self.start_us, "left"))
+        hi = len(ordered) if self.end_us is None else int(np.searchsorted(ordered, self.end_us, "right"))
+        selected = [(int(order[k]), int(ordered[k])) for k in range(lo, hi)]
+        if self.carry_state and self.start_us is not None and lo > 0:
+            selected.insert(0, (int(order[lo - 1]), self.start_us))
+        return selected
 
     def _should_include_topic(self, topic_name: str) -> bool:
         """Check if a topic should be included based on filter settings."""
@@ -79,16 +112,10 @@ class ULog2MCAPConverter:
 
     def _dataset_messages(self, d: Any, channel_id: int) -> Iterator[_Message]:
         """Lazily yield one topic's messages in timestamp order (stable for ties)."""
-        timestamps = d.data["timestamp"]
         _, access_list = parse_grouped_fields(d.data)
 
-        if np.all(timestamps[1:] >= timestamps[:-1]):
-            order: Any = range(len(timestamps))
-        else:
-            order = np.argsort(timestamps, kind="stable")
-
-        for i in order:
-            timestamp_ns = int(timestamps[i]) * 1000  # us -> ns
+        for i, timestamp_us in self._selected(d.data["timestamp"]):
+            timestamp_ns = timestamp_us * 1000  # us -> ns
 
             sample_dict = {}
             for field_name, is_array, arr_target in access_list:
@@ -99,10 +126,11 @@ class ULog2MCAPConverter:
 
             yield timestamp_ns, channel_id, json.dumps(sample_dict).encode("utf-8")
 
-    @staticmethod
-    def _logged_text_messages(ulog: ULog, channel_id: int) -> Iterator[_Message]:
-        """Lazily yield ULog text messages in timestamp order (stable for ties)."""
+    def _logged_text_messages(self, ulog: ULog, channel_id: int) -> Iterator[_Message]:
+        """Lazily yield ULog text messages in range, in timestamp order (stable for ties)."""
         for msg in sorted(ulog.logged_messages, key=lambda m: int(m.timestamp)):
+            if not self._in_range(int(msg.timestamp)):
+                continue
             timestamp_ns = int(msg.timestamp) * 1000
             level_str = msg.log_level_str() if callable(msg.log_level_str) else str(msg.log_level_str)
             log_dict = {
@@ -254,12 +282,16 @@ class ULog2MCAPConverter:
     def _earliest_timestamp_us(self, ulog: ULog) -> Optional[int]:
         """Earliest timestamp (us) among the messages that will be written, if any."""
         candidates = [
-            int(np.min(d.data["timestamp"]))
+            selected[0][1]
             for d in ulog.data_list
             if self._should_include_topic(d.name if d.multi_id == 0 else f"{d.name}_{d.multi_id}")
             and "timestamp" in d.data
             and len(d.data["timestamp"]) > 0
+            for selected in [self._selected(d.data["timestamp"])]
+            if selected
         ]
         if self._should_include_topic("log"):
-            candidates.extend(int(m.timestamp) for m in ulog.logged_messages)
+            candidates.extend(
+                int(m.timestamp) for m in ulog.logged_messages if self._in_range(int(m.timestamp))
+            )
         return min(candidates) if candidates else None

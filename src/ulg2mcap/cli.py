@@ -67,6 +67,23 @@ def main() -> int:
         help="Offset (ns) added to every MCAP log/publish time, e.g. to map boot time to UTC.",
     )
     parser.add_argument(
+        "--start-us",
+        type=int,
+        default=None,
+        help="Only convert messages logged at or after this ULog timestamp (us).",
+    )
+    parser.add_argument(
+        "--end-us",
+        type=int,
+        default=None,
+        help="Only convert messages logged at or before this ULog timestamp (us).",
+    )
+    parser.add_argument(
+        "--carry-state",
+        action="store_true",
+        help="With --start-us, also write each topic's latest earlier message at the start.",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -88,6 +105,9 @@ def main() -> int:
         exclude_topics=exclude_topics,
         compression=args.compress,
         time_offset_ns=args.time_offset_ns,
+        start_us=args.start_us,
+        end_us=args.end_us,
+        carry_state=args.carry_state,
     )
 
     if input_path.is_file():

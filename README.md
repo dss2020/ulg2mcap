@@ -57,6 +57,9 @@ options:
                         Comma or space-separated topic names to exclude.
   --time-offset-ns TIME_OFFSET_NS
                         Offset (ns) added to every MCAP log/publish time, e.g. to map boot time to UTC.
+  --start-us START_US   Only convert messages logged at or after this ULog timestamp (us).
+  --end-us END_US       Only convert messages logged at or before this ULog timestamp (us).
+  --carry-state         With --start-us, also write each topic's latest earlier message at the start.
   -v, --verbose         Print verbose conversion output.
 ```
 
@@ -78,6 +81,18 @@ field inside each message keeps its original boot-relative value.
 ```python
 # e.g. from a gps_utc topic: offset = (time_utc_usec - timestamp) * 1000
 converter = ULog2MCAPConverter(time_offset_ns=1_790_330_267_000_000_000)
+```
+
+#### Converting part of a log
+
+`start_us` / `end_us` keep only messages logged in that range (inclusive, in ULog
+microseconds, before any time offset). Topics logged only on change would then have no value
+until their next change; `carry_state=True` also writes each topic's latest message from before
+the range, stamped at `start_us` (its payload, including `timestamp`, is unchanged). Text log
+messages are events and are never carried.
+
+```python
+converter = ULog2MCAPConverter(start_us=413_418_009, end_us=434_068_005, carry_state=True)
 ```
 
 #### Extra metadata
