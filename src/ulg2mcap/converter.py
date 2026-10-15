@@ -4,7 +4,7 @@ import heapq
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Union
 import numpy as np
 
 from mcap.writer import CompressionType, Writer
@@ -14,6 +14,9 @@ from ulg2mcap.schemas import LOG_TOPIC_SCHEMA, generate_json_schema, parse_group
 
 # (timestamp_ns, channel_id, payload_bytes)
 _Message = Tuple[int, int, bytes]
+
+# Metadata record names the converter writes itself.
+RESERVED_METADATA_NAMES = frozenset({"ulog_header", "ulog_params"})
 
 
 class ULog2MCAPConverter:
@@ -110,7 +113,30 @@ class ULog2MCAPConverter:
             }
             yield timestamp_ns, channel_id, json.dumps(log_dict).encode("utf-8")
 
-    def convert(self, input_path: Union[str, Path], output_path: Union[str, Path]) -> Path:
+    @staticmethod
+    def _check_metadata(metadata: Mapping[str, Mapping[str, str]]) -> None:
+        """Reject extra metadata MCAP can't store as given, before any output is written."""
+        for name, data in metadata.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"metadata record name must be a non-empty string: {name!r}")
+            if name in RESERVED_METADATA_NAMES:
+                raise ValueError(f"metadata record name {name!r} is reserved by ulg2mcap")
+            if not isinstance(data, Mapping):
+                raise ValueError(f"metadata record {name!r} must be a mapping of strings")
+            for key, value in data.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    raise ValueError(
+                        f"metadata record {name!r} keys and values must be strings: "
+                        f"{key!r}: {value!r}"
+                    )
+
+    def convert(
+        self,
+        input_path: Union[str, Path],
+        output_path: Union[str, Path],
+        *,
+        metadata: Optional[Mapping[str, Mapping[str, str]]] = None,
+    ) -> Path:
         """Convert a ULog file to MCAP format.
 
         Messages are streamed into the writer via a k-way merge of the (individually
@@ -119,12 +145,17 @@ class ULog2MCAPConverter:
         Args:
             input_path: Path to input .ulg file.
             output_path: Path to output .mcap file.
+            metadata: Extra MCAP metadata records to write, as {record name: {key: value}}
+                with string keys and values, e.g. to describe where a log came from. Names
+                must not clash with the records ulg2mcap writes ('ulog_header', 'ulog_params').
 
         Returns:
             Path to written MCAP file.
         """
         input_file = Path(input_path).resolve()
         output_file = Path(output_path).resolve()
+        metadata = metadata or {}
+        self._check_metadata(metadata)
 
         if not input_file.exists():
             raise FileNotFoundError(f"Input file not found: {input_file}")
@@ -157,6 +188,9 @@ class ULog2MCAPConverter:
                     name="ulog_params",
                     data={str(k): str(v) for k, v in ulog.initial_parameters.items()},
                 )
+
+            for name, data in metadata.items():
+                writer.add_metadata(name=name, data=dict(data))
 
             # One lazily-evaluated, time-ordered stream per topic. Order matters: on
             # timestamp ties, heapq.merge yields from earlier streams first.

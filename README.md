@@ -80,6 +80,20 @@ field inside each message keeps its original boot-relative value.
 converter = ULog2MCAPConverter(time_offset_ns=1_790_330_267_000_000_000)
 ```
 
+#### Extra metadata
+
+Each output already carries the ULog info fields (`ulog_header`) and initial parameters
+(`ulog_params`) as MCAP metadata records. Add your own records per file, e.g. to say which
+vehicle a log came from. Keys and values must be strings.
+
+```python
+converter.convert(
+    "input_log.ulg",
+    "output_log.mcap",
+    metadata={"vehicle": {"serial": "22829", "operator": "alice"}},
+)
+```
+
 ---
 
 ## Running Tests
